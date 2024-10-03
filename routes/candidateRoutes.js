@@ -88,4 +88,91 @@ router.delete('/:candidateID', jwtAuthMiddleware, async (req, res) => {
     }
 })
 
+// let's start voting 
+router.post('/vote/:candidateID', jwtAuthMiddleware, async(req, res) => {
+    // no admin can vote
+    // user can only vote once 
+
+    candidateID = req.params.candidateID;
+    userID = req.user.id; 
+
+    try {
+
+        // Find the candidate document with the specified candidateID    
+        const candidate = await Candidate.findById(candidateID);
+        if(!candidate) {
+            return res.status(404).json({ message: 'Candidate not found' }); 
+        }
+
+        const user = await User.findById(userID);
+        if(!user) {
+            return res.status(404).json({ message: 'user not found' }); 
+        }
+        
+        if(user.role == 'admin') {
+            return res.status(403).json({ message: 'admin is not allowed' });
+        }
+        
+        if(user.isVoted) {
+            return res.status(400).json({ message: 'You have already voted' }); 
+        }
+
+        // Update the Candidate document to record the vote 
+        candidate.votes.push({ user: userID });
+        candidate.voteCount++;
+        await candidate.save();
+
+        // Update the user document 
+        user.isVoted = true;
+        await user.save();
+
+        res.status(200).json({ message: 'Vote recorded successfully' });
+    }
+    catch(err) {
+        console.log(err);
+        res.status(501).json({ error: 'Invalid Server Error' });
+    }
+});
+
+router.get('/vote/count', async(req, res) => {
+    try {
+        // Find all candidates and sort them by votecount in descending order
+        const candidate = await Candidate.find().sort({voteCount: 'desc'});
+
+        // Map the candidates to only return thier name and voteCount 
+        const voteRecord = candidate.map((data) => {
+            return {
+                party: data.party,
+                count: data.voteCount
+            }
+        });
+
+        return res.status(200).json(voteRecord);
+    }
+    catch(err) {
+        console.log(err);
+        res.status(501).json({ error: 'Invalid Server Error' });
+    }
+});
+
+// Get List of all candidates with only name and party fields
+router.get('/', async(req, res) => {
+    try {
+        const candidate = await Candidate.find();
+
+        const listOfCandidates = candidate.map((data) => {
+            return {
+                name: data.name,
+                party: data.party
+            }
+        });
+
+        return res.status(200).json(listOfCandidates);
+    }   
+    catch(err) {
+        console.log(err);
+        res.status(501).json({ error: 'Invalid Server Error' });
+    }
+});
+
 module.exports = router;
